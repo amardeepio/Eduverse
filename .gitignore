@@ -1,0 +1,18 @@
+# General
+node_modules/
+.env
+dist/
+build/
+coverage/
+
+# Contract compilation artifacts
+contracts/artifacts/
+contracts/artifacts/**/*.json
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

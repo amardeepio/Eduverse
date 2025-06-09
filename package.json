@@ -1,0 +1,20 @@
+{
+    "name": "eduverse-hackathon",
+    "version": "1.0.0",
+    "private": true,
+    "workspaces": [
+      "frontend",
+      "backend",
+      "contracts"
+    ],
+    "scripts": {
+        "dev:frontend": "npx --prefix frontend vite",
+        "dev:backend": "npm run dev --prefix backend",
+        "dev": "concurrently \"npm:dev:frontend\" \"npm:dev:backend\"",
+        "compile:contract": "npm run compile --workspace=contracts",
+        "deploy:contract": "npm run deploy --workspace=contracts"
+      },
+    "devDependencies": {
+      "concurrently": "^8.2.2"
+    }
+  }
