@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/Users/amardeep/Eduverse/contracts/LearningRecord.sol": {
-      "lastModificationDate": 1749410571918,
-      "contentHash": "03ec893bed345c21382558f403220c1c",
+      "lastModificationDate": 1749497169277,
+      "contentHash": "31df3c05b29e0b77928e83f63c16984a",
       "sourceName": "LearningRecord.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -34,6 +34,7 @@
         "^0.8.24"
       ],
       "artifacts": [
+        "Ecrecover",
         "LearningRecord"
       ]
     }

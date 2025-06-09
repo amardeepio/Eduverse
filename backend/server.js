@@ -6,6 +6,15 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
+// --- FINAL FIX: Add a Global Error Catcher ---
+// This will catch any uncaught error and prevent the server from silently crashing.
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('!!!!!!!!!! UNHANDLED REJECTION !!!!!!!!!');
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // We can add more detailed logging here if needed
+});
+// --- End of Fix ---
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,36 +30,35 @@ app.use(express.json());
 const { HYPERION_RPC_URL, SERVER_WALLET_PRIVATE_KEY, CONTRACT_ADDRESS } = process.env;
 const PORT = 3001;
 
-if (!SERVER_WALLET_PRIVATE_KEY || !CONTRACT_ADDRESS) {
-  console.error("Missing required environment variables. Check your .env file.");
-  process.exit(1);
-}
-
-// --- FIX: Define the network details to prevent the ENS error ---
-const provider = new ethers.JsonRpcProvider(HYPERION_RPC_URL, {
-    name: 'hyperion-testnet',
-    chainId: 133717 // The chain ID from the error log
-});
-// -----------------------------------------------------------------
-
+const provider = new ethers.JsonRpcProvider(HYPERION_RPC_URL);
 const wallet = new ethers.Wallet(SERVER_WALLET_PRIVATE_KEY, provider);
 const contract = new ethers.Contract(CONTRACT_ADDRESS, LearningRecordABI, wallet);
 
 console.log(`Backend connected to contract at: ${CONTRACT_ADDRESS}`);
 
-app.post('/complete-module', async (req, res) => {
-  const { userAddress, moduleName } = req.body;
-  console.log(`[AGENT] Received request for ${userAddress} on module ${moduleName}`);
-  
+app.post('/complete-module-signed', async (req, res) => {
+  const { userAddress, moduleName, signature } = req.body;
+  console.log(`[AGENT] Received SIGNED request for ${userAddress}`);
+
+  if (!userAddress || !moduleName || !signature) {
+    return res.status(400).json({ success: false, message: "Missing required parameters." });
+  }
+
   try {
-    const tx = await contract.addAchievement(userAddress, moduleName);
+    console.log('[AGENT] Calling addAchievementWithSignature...');
+    const tx = await contract.addAchievementWithSignature(userAddress, moduleName, signature);
+    
     console.log(`[AGENT] Transaction sent! Waiting for confirmation... Hash: ${tx.hash}`);
     await tx.wait();
+    
     console.log(`[AGENT] Transaction confirmed!`);
     res.json({ success: true, txHash: tx.hash });
+
   } catch (error) {
-    console.error("[AGENT] Blockchain transaction failed:", error);
-    res.status(500).json({ success: false, message: "Error writing to blockchain." });
+    console.error("!!!!!!!!!! TRANSACTION FAILED (CAUGHT) !!!!!!!!!");
+    console.error("Detailed Error:", error);
+    const reason = error.reason || error.message || "An unknown error occurred.";
+    res.status(500).json({ success: false, message: reason });
   }
 });
 
