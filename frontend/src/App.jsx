@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ethers } from 'ethers';
 
-const EXPLORER_URL = "https://testnet-explorer.hyperion-api.com/tx/";
+const EXPLORER_URL = "https://hyperion-testnet-explorer.metisdevops.link/tx/";
 const BACKEND_URL = "http://localhost:3001";
 
 function App() {
