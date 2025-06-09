@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
 // --- Configuration ---
 const EXPLORER_URL = "https://hyperion-testnet-explorer.metisdevops.link/tx/";
-const BACKEND_URL = "http://localhost:3001";
+const BACKEND_URL = "http://localhost:3001"; // Your backend server URL
 
-// --- Course and Quiz Data ---
+// --- Mock Data ---
+// In a real app, this would come from a database or CMS.
 const courses = [
   {
     id: 1,
@@ -38,35 +39,58 @@ const courses = [
   },
 ];
 
-// --- Main Application Component ---
+
+// =================================================================================
+// --- Main Application Component (The Router) ---
+// In a real application, this component would handle routing between different pages.
+// =================================================================================
 function App() {
-  const [account, setAccount] = useState(null);
-  const [view, setView] = useState('connect'); // 'connect', 'courses', 'quiz', 'success'
+  const [user, setUser] = useState(null); 
+  const [currentView, setCurrentView] = useState('courses'); // 'courses', 'quiz', 'success'
   const [selectedCourse, setSelectedCourse] = useState(null);
+
+  // Check if user is already logged in on page load
+  useEffect(() => {
+    const checkLogin = () => {
+      const token = localStorage.getItem('authToken');
+      const address = localStorage.getItem('userAddress');
+      if (token && address) {
+        setUser({ address, token });
+      }
+    };
+    checkLogin();
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userAddress');
+    setUser(null);
+  };
   
-  const renderContent = () => {
-    if (!account) {
-      return <ConnectWalletView onConnect={setAccount} setView={setView} />;
-    }
-    
-    switch (view) {
-      case 'courses':
-        return <CourseSelectionView onSelectCourse={setSelectedCourse} setView={setView} />;
+  // If no user is logged in, render the LoginPage
+  if (!user) {
+    return <LoginPage onLogin={setUser} />;
+  }
+  
+  // If user is logged in, render the main application content
+  const renderMainContent = () => {
+    switch (currentView) {
       case 'quiz':
-        return <QuizView course={selectedCourse} account={account} setView={setView} />;
+        return <QuizView course={selectedCourse} user={user} setView={setCurrentView} />;
       case 'success':
-         return <SuccessView onReset={() => setView('courses')} />;
+         return <SuccessView onReset={() => setCurrentView('courses')} />;
+      case 'courses':
       default:
-        return <CourseSelectionView onSelectCourse={setSelectedCourse} setView={setView} />;
+        return <CourseSelectionView onSelectCourse={setSelectedCourse} setView={setCurrentView} />;
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 font-sans">
       <div className="w-full max-w-2xl bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
-        <Header account={account} />
+        <Header user={user} onLogout={handleLogout} />
         <div className="mt-8">
-          {renderContent()}
+          {renderMainContent()}
         </div>
       </div>
       <Footer />
@@ -74,34 +98,86 @@ function App() {
   );
 }
 
-// --- View Components ---
 
-const ConnectWalletView = ({ onConnect, setView }) => {
+// =================================================================================
+// --- Page Components ---
+// In a real application, each of these components would be in its own file.
+// For example: src/pages/LoginPage.jsx
+// =================================================================================
+
+const LoginPage = ({ onLogin }) => {
   const [error, setError] = useState('');
-  
-  const handleConnect = async () => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async () => {
     if (!window.ethereum) return setError('MetaMask is not installed!');
+    
+    setIsLoading(true);
+    setError('');
+
     try {
+      // Step 1: Connect wallet and get address
       const provider = new ethers.BrowserProvider(window.ethereum);
       const accounts = await provider.send("eth_requestAccounts", []);
-      onConnect(accounts[0]);
-      setView('courses');
+      const address = accounts[0];
+
+      // NOTE: The backend needs to be updated to handle these new endpoints.
+      // Step 2: Get a unique message (nonce) from the backend to sign
+      const nonceResponse = await fetch(`${BACKEND_URL}/api/auth/nonce?address=${address}`);
+      if (!nonceResponse.ok) throw new Error("Could not get nonce from server. Is the backend running?");
+      const { nonce } = await nonceResponse.json();
+
+      // Step 3: Get user to sign the message with MetaMask
+      const signer = await provider.getSigner();
+      const signature = await signer.signMessage(nonce);
+
+      // Step 4: Send the signature to the backend for verification
+      const loginResponse = await fetch(`${BACKEND_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address, signature }),
+      });
+
+      if (!loginResponse.ok) throw new Error("Login verification failed.");
+      const { token } = await loginResponse.json();
+
+      // Step 5: If successful, store the token and update the user state
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('userAddress', address);
+      onLogin({ address, token });
+
     } catch (err) {
-      setError('Failed to connect wallet.');
+      setError(err.message || "Login failed. Please try again.");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="text-center">
-      <h2 className="text-2xl font-semibold mb-2">Welcome to EduVerse</h2>
-      <p className="text-gray-400 mb-6">Connect your wallet to begin your learning journey.</p>
-      <button onClick={handleConnect} className="bg-cyan-500 hover:bg-cyan-600 font-bold py-3 px-8 rounded-lg transition-transform transform hover:scale-105">
-        Connect Wallet
-      </button>
-      {error && <p className="text-red-400 mt-4">{error}</p>}
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 font-sans">
+        <div className="w-full max-w-sm mx-auto">
+            <div className="text-center mb-8">
+                <h1 className="text-4xl font-bold">Edu<span className="text-cyan-400">Verse</span></h1>
+                <p className="text-gray-400 mt-2">Your gateway to decentralized learning.</p>
+            </div>
+            <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
+                <h2 className="text-2xl font-semibold mb-2 text-center">Sign-In</h2>
+                <p className="text-gray-400 mb-6 text-center">Prove ownership of your wallet to continue.</p>
+                <button onClick={handleLogin} disabled={isLoading} className="w-full bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-500 font-bold py-3 px-8 rounded-lg transition-transform transform hover:scale-105">
+                    {isLoading ? 'Waiting for signature...' : 'Login with MetaMask'}
+                </button>
+                {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
+            </div>
+        </div>
     </div>
   );
 };
+
+
+// =================================================================================
+// --- View Components (would be in src/components) ---
+// =================================================================================
 
 const CourseSelectionView = ({ onSelectCourse, setView }) => (
   <div>
@@ -122,7 +198,7 @@ const CourseSelectionView = ({ onSelectCourse, setView }) => (
   </div>
 );
 
-const QuizView = ({ course, account, setView }) => {
+const QuizView = ({ course, user, setView }) => {
   const [answers, setAnswers] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -141,7 +217,6 @@ const QuizView = ({ course, account, setView }) => {
     }
     
     if (!window.ethereum) return setError('MetaMask is not installed!');
-
     setIsLoading(true);
     setError('');
     setTxHash('');
@@ -151,21 +226,15 @@ const QuizView = ({ course, account, setView }) => {
       const signer = await provider.getSigner();
       
       const moduleName = course.title;
-
-      // --- FIX: Create and sign the HASH of the message ---
-      // 1. Create the message string.
       const message = `complete-module:${moduleName}`;
-      // 2. Hash the message using keccak256 (the standard way).
       const messageHash = ethers.id(message);
-      // 3. Sign the 32-byte hash. MetaMask will still show this as a "Signature Request".
       const signature = await signer.signMessage(ethers.getBytes(messageHash));
-      // --- End of Fix ---
 
       const response = await fetch(`${BACKEND_URL}/complete-module-signed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userAddress: account,
+          userAddress: user.address,
           moduleName: moduleName,
           signature: signature,
         }),
@@ -183,11 +252,10 @@ const QuizView = ({ course, account, setView }) => {
       setIsLoading(false);
     }
   };
-
+  
   if (txHash) {
     return <SuccessView txHash={txHash} onReset={() => setView('courses')} />;
   }
-  
   return (
     <div>
       <h2 className="text-2xl font-semibold text-cyan-300 mb-4">{course.title} - Quiz</h2>
@@ -198,13 +266,7 @@ const QuizView = ({ course, account, setView }) => {
             <div className="flex flex-col space-y-2">
               {q.options.map(option => (
                 <label key={option} className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600">
-                  <input
-                    type="radio"
-                    name={`question-${index}`}
-                    value={option}
-                    onChange={() => handleAnswerChange(index, option)}
-                    className="form-radio h-5 w-5 text-cyan-600 bg-gray-800 border-gray-600 focus:ring-cyan-500"
-                  />
+                  <input type="radio" name={`question-${index}`} value={option} onChange={() => handleAnswerChange(index, option)} className="form-radio h-5 w-5 text-cyan-600"/>
                   <span>{option}</span>
                 </label>
               ))}
@@ -226,14 +288,9 @@ const SuccessView = ({ txHash, onReset }) => (
             <svg className="w-12 h-12 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
         </div>
         <h2 className="text-3xl font-bold text-green-400">Achievement Unlocked!</h2>
-        <p className="text-gray-300 mt-2 mb-6">Your accomplishment has been permanently recorded on the Hyperion blockchain.</p>
-        <a 
-            href={`${EXPLORER_URL}${txHash}`} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-block bg-gray-700 hover:bg-gray-600 text-cyan-300 font-mono text-sm py-3 px-6 rounded-lg break-all"
-        >
-            View Transaction: {`${txHash.substring(0, 10)}...${txHash.substring(txHash.length - 10)}`}
+        <p className="text-gray-300 mt-2 mb-6">Your accomplishment has been permanently recorded.</p>
+        <a href={`${EXPLORER_URL}${txHash}`} target="_blank" rel="noopener noreferrer" className="inline-block bg-gray-700 hover:bg-gray-600 text-cyan-300 font-mono text-sm py-3 px-6 rounded-lg break-all">
+            View Transaction
         </a>
         <button onClick={onReset} className="block mx-auto mt-6 text-cyan-400 hover:underline">
             Back to Classes
@@ -241,13 +298,16 @@ const SuccessView = ({ txHash, onReset }) => (
     </div>
 );
 
-// --- Shared Components ---
-const Header = ({ account }) => (
+
+const Header = ({ user, onLogout }) => (
   <header className="flex justify-between items-center">
     <h1 className="text-3xl font-bold">Edu<span className="text-cyan-400">Verse</span></h1>
-    {account && (
-      <div className="bg-gray-700 text-sm text-cyan-300 rounded-full px-4 py-2">
-        {`${account.substring(0, 6)}...${account.substring(account.length - 4)}`}
+    {user && (
+      <div className="flex items-center space-x-4">
+        <div className="bg-gray-700 text-sm text-cyan-300 rounded-full px-4 py-2">
+          {`${user.address.substring(0, 6)}...${user.address.substring(user.address.length - 4)}`}
+        </div>
+        <button onClick={onLogout} className="text-sm text-gray-400 hover:text-white">Logout</button>
       </div>
     )}
   </header>
