@@ -163,10 +163,13 @@ const CourseSelectionView = ({ onSelectCourse, setView }) => (
 
 
 const QuizView = ({ course, user, setView }) => {
-  // --- State for managing the current question and user's answers ---
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [isCorrect, setIsCorrect] = useState(false); // NEW: State to show "Correct!" message
+  const [isCorrect, setIsCorrect] = useState(false);
+  const [wrongAnswerCount, setWrongAnswerCount] = useState({});
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [aiHint, setAiHint] = useState(null);
+  const [isFetchingHint, setIsFetchingHint] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -175,38 +178,71 @@ const QuizView = ({ course, user, setView }) => {
   const currentQuestion = course.quiz[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === course.quiz.length - 1;
 
-  // --- Logic to handle checking the answer and moving to the next question ---
   const handleNext = () => {
     if (selectedAnswer === null) {
       setError("Please select an answer.");
       return;
     }
     
-    // Check if the selected answer is correct
     if (selectedAnswer === currentQuestion.correctAnswer) {
       setError('');
-      setIsCorrect(true); // Show the "Correct!" message
+      setIsCorrect(true);
 
-      // Wait for a moment before proceeding
       setTimeout(() => {
-        setIsCorrect(false); // Hide the message after a delay
-        
+        setIsCorrect(false);
         if (isLastQuestion) {
-          // If it was the last question, trigger the final submission
           handleSubmitToBlockchain();
         } else {
-          // If not the last question, move to the next one
           setSelectedAnswer(null);
+          setAiHint(null);
           setCurrentQuestionIndex(prevIndex => prevIndex + 1);
         }
-      }, 1000); // 1-second delay
+      }, 1000);
     } else {
-      // If the answer is incorrect, show an error
+      const newCount = (wrongAnswerCount[currentQuestionIndex] || 0) + 1;
+      setWrongAnswerCount(prev => ({ ...prev, [currentQuestionIndex]: newCount }));
       setError("That's not quite right. Please try again!");
+
+      if (newCount >= 2) {
+        setShowHelpModal(true);
+      }
     }
   };
+  
+  const handleRequestHint = async () => {
+      setShowHelpModal(false);
+      setIsFetchingHint(true);
+      setError('');
 
-  // This function now only handles the final blockchain submission
+      try {
+          const response = await fetch(`${BACKEND_URL}/api/help`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  question: currentQuestion.question,
+                  options: currentQuestion.options,
+              })
+          });
+
+          if (!response.ok) {
+              throw new Error("Failed to get a hint from the AI tutor.");
+          }
+
+          const data = await response.json();
+          // --- FIX: The hint is directly on the data object, not nested in 'result' ---
+          if (data.success) {
+              setAiHint(data.hint);
+          } else {
+              throw new Error(data.error || "AI tutor could not provide a hint.");
+          }
+
+      } catch (err) {
+          setError(err.message);
+      } finally {
+          setIsFetchingHint(false);
+      }
+  };
+
   const handleSubmitToBlockchain = async () => {
     if (!window.ethereum) return setError('MetaMask is not installed!');
     setIsLoading(true);
@@ -250,6 +286,23 @@ const QuizView = ({ course, user, setView }) => {
   
   return (
     <div>
+      {showHelpModal && (
+        <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center z-10">
+          <div className="bg-gray-800 p-8 rounded-lg text-center shadow-lg">
+            <h3 className="text-xl font-bold mb-4">Stuck on this question?</h3>
+            <p className="text-gray-400 mb-6">Would you like a hint from our AI Tutor?</p>
+            <div className="flex justify-center space-x-4">
+              <button onClick={() => setShowHelpModal(false)} className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-lg">
+                No, I'll try again
+              </button>
+              <button onClick={handleRequestHint} className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-lg">
+                Yes, please!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <button onClick={() => setView('courses')} className="text-sm text-cyan-400 hover:underline mb-4">
         &larr; Back to Classes
       </button>
@@ -260,6 +313,14 @@ const QuizView = ({ course, user, setView }) => {
       <div className="space-y-6">
         <div>
           <p className="font-medium text-lg mb-3">{currentQuestion.question}</p>
+          
+          {isFetchingHint && <p className="text-sm text-yellow-400 p-3 bg-yellow-900/50 rounded-lg">🤖 AI Tutor is thinking...</p>}
+          {aiHint && (
+            <div className="p-3 bg-blue-900/50 border border-blue-400 rounded-lg mb-4">
+              <p className="text-sm text-blue-300"><span className="font-bold">AI Hint:</span> {aiHint}</p>
+            </div>
+          )}
+
           <div className="flex flex-col space-y-2">
             {currentQuestion.options.map(option => (
               <label key={option} className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all ${selectedAnswer === option ? 'bg-cyan-900/50 border-cyan-400 border' : 'bg-gray-700 border border-transparent hover:bg-gray-600'}`}>
@@ -279,7 +340,6 @@ const QuizView = ({ course, user, setView }) => {
       </div>
       
       <div className="h-8 mt-4 text-center">
-        {/* --- NEW: Conditionally render the "Correct!" message --- */}
         {isCorrect && (
           <p className="font-bold text-green-400">Correct!</p>
         )}
