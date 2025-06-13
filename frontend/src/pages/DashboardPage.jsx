@@ -63,6 +63,7 @@ const QuizView = ({ course, user, setView }) => {
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState('');
   
+  const BACKEND_URL = "http://localhost:3001";
   const currentQuestion = course.quiz[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === course.quiz.length - 1;
 
@@ -95,7 +96,7 @@ const QuizView = ({ course, user, setView }) => {
       setIsFetchingHint(true);
       setError('');
       try {
-          const response = await fetch(`${BACKEND_URL}/api/help`, {
+          const response = await fetch(`${BACKEND_URL}/api/hint`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -105,7 +106,6 @@ const QuizView = ({ course, user, setView }) => {
           });
           if (!response.ok) throw new Error("Failed to get a hint from the AI tutor.");
           const data = await response.json();
-          // The fix for the previous error: access data.hint
           if (data.success) {
               setAiHint(data.hint);
           } else {
@@ -135,11 +135,17 @@ const QuizView = ({ course, user, setView }) => {
         body: JSON.stringify({ userAddress: user.address, moduleName, signature })
       });
       const data = await response.json();
-      if (data.success) {
-          setTxHash(data.txHash);
+
+      console.log("Data received from backend:", data);
+
+      // --- FINAL FIX: Access the txHash from the nested 'result' object ---
+      if (data.success && data.result.txHash) {
+          setTxHash(data.result.txHash);
       } else {
           setError(data.message || 'An unknown error occurred.');
       }
+      // --- End of Fix ---
+
     } catch (err) {
       setError(err.reason || err.message || "Operation failed.");
     } finally {

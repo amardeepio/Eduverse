@@ -16,6 +16,22 @@ app.use(express.json());
 const { JWT_SECRET } = process.env;
 const PORT = 3001;
 const AGENT_SERVICE_URL = "http://localhost:3002"; // URL for our new agent service
+async function forwardTask(agentName, taskData) {
+  const response = await fetch(`${AGENT_SERVICE_URL}/task`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentName, task: { data: taskData } })
+  });
+  if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Agent service responded with status ${response.status}: ${errorBody}`);
+  }
+  const text = await response.text();
+  if (!text) {
+      throw new Error("Agent service returned an empty response.");
+  }
+  return JSON.parse(text);
+}
 
 if (!JWT_SECRET) {
   console.error("Missing JWT_SECRET environment variable. Check your .env file.");
@@ -131,13 +147,22 @@ app.post('/api/chat', async (req, res) => {
 // --- UPDATED: Module Completion Route is now temporarily mocked ---
 // =================================================================================
 app.post('/complete-module-signed', async (req, res) => {
-  console.log(`[API Gateway] Received achievement request. (Currently mocked)`);
-  
-  // Return a fake success message without calling the blockchain
-  res.json({ 
-    success: true, 
-    txHash: "0x_mock_transaction_hash_for_testing_tutor_agent_0000000000000" 
-  });
+  // The data sent from your frontend (userAddress, moduleName, signature)
+  const taskData = { ...req.body, contractAddress: process.env.CONTRACT_ADDRESS };
+
+  try {
+      console.log('[API Gateway] Forwarding request to ProgressTrackerAgent...');
+      
+      // Use the helper function to send the task to the agent service
+      const data = await forwardTask('ProgressTrackerAgent', taskData);
+      
+      // Send the successful response from the agent back to the frontend
+      res.json(data);
+
+  } catch (error) {
+      console.error(`[API Gateway] Error in /complete-module-signed: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 
