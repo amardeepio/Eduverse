@@ -44,7 +44,7 @@ const userNonces = {};
 // =================================================================================
 // --- Help Route for AI Tutor (This is our focus) ---
 // =================================================================================
-app.post('/api/help', async (req, res) => {
+app.post('/api/hint', async (req, res) => {
     const { question, options } = req.body;
     console.log(`[API Gateway] Received help request for question: "${question}"`);
     

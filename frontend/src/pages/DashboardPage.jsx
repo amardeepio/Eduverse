@@ -14,19 +14,42 @@ const BACKEND_URL = "http://localhost:3001";
 // --- NEW: ChatMessage Component for Parsing and Highlighting ---
 // =================================================================================
 
-const ChatMessage = ({ text }) => {
+const ChatMessage = ({ text, isUser }) => {
+  const [displayedText, setDisplayedText] = useState('');
+
+  useEffect(() => {
+    // If it's a user message, display it instantly without animation.
+    if (isUser) {
+      setDisplayedText(text);
+      return;
+    }
+
+    // If it's an AI message, create the typewriter effect.
+    setDisplayedText(''); // Reset on new message
+    let index = 0;
+    const intervalId = setInterval(() => {
+      if (index < text.length) {
+        setDisplayedText(prev => prev + text.charAt(index));
+        index++;
+      } else {
+        clearInterval(intervalId); // Stop when the full message is displayed
+      }
+    }, 5); // Adjust typing speed here (lower number is faster)
+
+    // Cleanup function to clear the interval if the component unmounts
+    return () => clearInterval(intervalId);
+  }, [text, isUser]); // This effect re-runs if the text or sender changes
+
   return (
-    // FIX: Apply styling classes to a wrapper div, not the ReactMarkdown component
     <div className="text-sm prose prose-invert max-w-none">
       <ReactMarkdown
-        children={text}
+        children={displayedText} // Render the animated text
         components={{
-          // This is the key part: we define a custom renderer for code blocks
+          // This part for code highlighting remains the same
           code(props) {
             const {children, className, node, ...rest} = props
             const match = /language-(\w+)/.exec(className || '')
             return match ? (
-              // If it's a fenced code block (```), use SyntaxHighlighter
               <SyntaxHighlighter
                 {...rest}
                 PreTag="div"
@@ -35,7 +58,6 @@ const ChatMessage = ({ text }) => {
                 style={atomDark}
               />
             ) : (
-              // If it's inline code (`code`), render it with a different style
               <code {...rest} className="bg-gray-900 px-1 py-0.5 rounded-md">
                 {children}
               </code>
@@ -90,6 +112,19 @@ const CourseSelectionView = ({ onSelectCourse, setView }) => (
   </div>
 );
 
+const ErrorNotification = ({ message, onDismiss }) => {
+  if (!message) return null;
+  return (
+    <div className="bg-red-900/50 border border-red-500 text-red-300 px-4 py-3 rounded-lg relative text-center" role="alert">
+      <span className="block sm:inline">{message}</span>
+      <button onClick={onDismiss} className="absolute top-0 bottom-0 right-0 px-4 py-3">
+        <svg className="fill-current h-6 w-6 text-red-400" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+      </button>
+    </div>
+  );
+};
+// ---
+
 
 const QuizView = ({ course, user, setView }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -107,19 +142,49 @@ const QuizView = ({ course, user, setView }) => {
   const currentQuestion = course.quiz[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === course.quiz.length - 1;
 
+  // --- NEW: State to hold the currently visible part of the hint for the animation ---
+  const [displayedHint, setDisplayedHint] = useState('');
+
+  // --- NEW: useEffect hook to create the streaming text animation ---
+  useEffect(() => {
+    // If there's no hint, do nothing.
+    if (!aiHint) return;
+
+    // Reset the displayed hint when a new hint arrives.
+    setDisplayedHint('');
+    
+    let index = 0;
+    const intervalId = setInterval(() => {
+      if (index < aiHint.length) {
+        setDisplayedHint(prev => prev + aiHint.charAt(index));
+        index++;
+      } else {
+        clearInterval(intervalId); // Stop the timer when the full hint is displayed
+      }
+    }, 30); // Adjust the speed of the typing here (e.g., 30ms per character)
+
+    // Cleanup function to clear the interval if the component unmounts
+    return () => clearInterval(intervalId);
+  }, [aiHint]); // This effect re-runs whenever a new hint is set
+
   const handleNext = () => {
-    if (selectedAnswer === null) return setError("Please select an answer.");
+    if (selectedAnswer === null) {
+      setError("Please select an answer.");
+      return;
+    }
     
     if (selectedAnswer === currentQuestion.correctAnswer) {
       setError('');
       setIsCorrect(true);
+
       setTimeout(() => {
         setIsCorrect(false);
         if (isLastQuestion) {
           handleSubmitToBlockchain();
         } else {
+          // Reset state for the next question
           setSelectedAnswer(null);
-          setAiHint(null);
+          setAiHint(null); 
           setCurrentQuestionIndex(prev => prev + 1);
         }
       }, 1000);
@@ -127,7 +192,9 @@ const QuizView = ({ course, user, setView }) => {
       const newCount = (wrongAnswerCount[currentQuestionIndex] || 0) + 1;
       setWrongAnswerCount(prev => ({ ...prev, [currentQuestionIndex]: newCount }));
       setError("That's not quite right. Please try again!");
-      if (newCount >= 2) setShowHelpModal(true);
+      if (newCount >= 2) {
+        setShowHelpModal(true);
+      }
     }
   };
   
@@ -147,17 +214,16 @@ const QuizView = ({ course, user, setView }) => {
           if (!response.ok) throw new Error("Failed to get a hint from the AI tutor.");
           const data = await response.json();
           if (data.success) {
-              setAiHint(data.hint);
+              setAiHint(data.hint); // Set the hint state
           } else {
               throw new Error(data.error || "AI tutor could not provide a hint.");
           }
       } catch (err) {
           setError(err.message);
       } finally {
-          setIsFetchingHint(false);
+          setIsFetchingHint(false); // Hide loading indicator
       }
   };
-
   const handleSubmitToBlockchain = async () => {
     if (!window.ethereum) return setError('MetaMask is not installed!');
     setIsLoading(true);
@@ -217,8 +283,22 @@ const QuizView = ({ course, user, setView }) => {
       <div className="space-y-6">
         <div>
           <p className="font-medium text-lg mb-3">{currentQuestion.question}</p>
-          {isFetchingHint && <p className="text-sm text-yellow-400 p-3 bg-yellow-900/50 rounded-lg">🤖 AI Tutor is thinking...</p>}
-          {aiHint && <div className="p-3 bg-blue-900/50 border border-blue-400 rounded-lg mb-4"><p className="text-sm text-blue-300"><span className="font-bold">AI Hint:</span> {aiHint}</p></div>}
+          
+          {isFetchingHint && (
+            <div className="text-sm text-yellow-400 p-3 bg-yellow-900/50 rounded-lg flex items-center space-x-2">
+                <span>🤖 AI Tutor is thinking</span>
+                <span className="animate-bounce" style={{ animationDelay: '0s' }}>.</span>
+                <span className="animate-bounce" style={{ animationDelay: '0.1s' }}>.</span>
+                <span className="animate-bounce" style={{ animationDelay: '0.2s' }}>.</span>
+            </div>
+          )}
+          
+          {displayedHint && (
+            <div className="p-3 bg-blue-900/50 border border-blue-400 rounded-lg mb-4">
+              <p className="text-sm text-blue-300"><span className="font-bold">AI Hint:</span> {displayedHint}</p>
+            </div>
+          )}
+
           <div className="flex flex-col space-y-2">
             {currentQuestion.options.map(option => (
               <label key={option} className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all ${selectedAnswer === option ? 'bg-cyan-900/50 border-cyan-400 border' : 'bg-gray-700 border border-transparent hover:bg-gray-600'}`}>
@@ -231,7 +311,7 @@ const QuizView = ({ course, user, setView }) => {
       </div>
       <div className="h-8 mt-4 text-center">
         {isCorrect && <p className="font-bold text-green-400">Correct!</p>}
-        {error && <p className="text-red-400">{error}</p>}
+        <ErrorNotification message={error} onDismiss={() => setError('')} />
       </div>
       <button onClick={handleNext} disabled={isLoading || isCorrect} className="w-full mt-2 bg-cyan-500 hover:bg-cyan-600 disabled:bg-gray-500 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg">
         {isLoading ? 'Submitting...' : (isLastQuestion ? 'Finish & Submit' : 'Check Answer')}
@@ -251,11 +331,11 @@ const TutorChatView = ({ course, setView }) => {
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isLoading]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
 
     const userMessage = { sender: 'user', text: input };
     setMessages(prev => [...prev, userMessage]);
@@ -263,13 +343,18 @@ const TutorChatView = ({ course, setView }) => {
     setIsLoading(true);
 
     try {
+      const BACKEND_URL = "http://localhost:3001";
       const response = await fetch(`${BACKEND_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userQuestion: input, courseTitle: course.title })
+        body: JSON.stringify({
+          userQuestion: input,
+          courseTitle: course.title
+        })
       });
 
       if (!response.ok) throw new Error("The AI Tutor is currently unavailable.");
+
       const data = await response.json();
       const aiMessage = { sender: 'ai', text: data.answer || "Sorry, I'm not sure how to answer that." };
       setMessages(prev => [...prev, aiMessage]);
@@ -294,16 +379,19 @@ const TutorChatView = ({ course, setView }) => {
           <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.sender === 'ai' && <span className="text-2xl">🤖</span>}
             <div className={`max-w-xl p-3 rounded-lg ${msg.sender === 'user' ? 'bg-cyan-600' : 'bg-gray-700'}`}>
-              <ChatMessage text={msg.text} />
+              {/* UPDATED: Pass the message directly to the ChatMessage component */}
+              <ChatMessage text={msg.text} isUser={msg.sender === 'user'} />
             </div>
           </div>
         ))}
-        {/* --- UPDATED: Replaced the old comment with a proper loading indicator --- */}
         {isLoading && (
           <div className="flex items-start gap-3 justify-start">
              <span className="text-2xl">🤖</span>
-             <div className="max-w-md p-3 rounded-lg bg-gray-700">
-              <p className="text-sm animate-pulse">AI is typing...</p>
+             <div className="max-w-md p-3 rounded-lg bg-gray-700 flex items-center space-x-1">
+              <span className="text-sm text-gray-400 animate-pulse">AI is typing</span>
+              <span className="animate-bounce text-gray-400" style={{ animationDelay: '0s' }}>.</span>
+              <span className="animate-bounce text-gray-400" style={{ animationDelay: '0.1s' }}>.</span>
+              <span className="animate-bounce text-gray-400" style={{ animationDelay: '0.2s' }}>.</span>
             </div>
           </div>
         )}
