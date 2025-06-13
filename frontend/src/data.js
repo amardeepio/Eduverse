@@ -1,3 +1,4 @@
+const CONTRACT_ADDRESS = "0x206843453E692aF1F65239c3DF25d9a18a4909b0";
 export const categories = [
     {
       categoryName: "Blockchain 101",
