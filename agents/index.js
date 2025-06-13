@@ -4,13 +4,16 @@ import dotenv from 'dotenv';
 
 
 import { TutorAgent } from './TutorAgents.js';
+import { TutorChatAgent } from './TutorChatAgent.js';
+
 
 // Load environment variables from the main backend's .env file
 dotenv.config({ path: '../backend/.env' });
 
 // --- NEW: Initialize all agents after loading environment variables ---
 try {
-  TutorAgent.initialize(); // This sets up the AI model with the API key
+  TutorAgent.initialize();
+  TutorChatAgent.initialize() // This sets up the AI model with the API key
   // In the future, you would initialize other agents here too.
   console.log('[Agent Service] All agents initialized successfully.');
 } catch (error) {
@@ -40,6 +43,14 @@ app.post('/task', async (req, res) => {
     if (agentName === 'TutorAgent') {
         try {
             const result = await TutorAgent.handleTask(task);
+            res.json({ success: true, result });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    } 
+    else if (agentName === 'TutorChatAgent') {
+        try {
+            const result = await TutorChatAgent.handleTask(task);
             res.json({ success: true, result });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });

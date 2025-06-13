@@ -91,6 +91,41 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// =================================================================================
+// --- Chat Route for AI Tutor ---
+// =================================================================================
+app.post('/api/chat', async (req, res) => {
+  const { userQuestion, courseTitle } = req.body;
+  console.log(`[API Gateway] Received chat request for course: "${courseTitle}"`);
+
+  try {
+      // Forward the task to the agent service
+      const response = await fetch(`${AGENT_SERVICE_URL}/task`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+              agentName: 'TutorChatAgent',
+              task: { data: { userQuestion, courseTitle } }
+          })
+      });
+
+      if (!response.ok) {
+          throw new Error(`Agent service responded with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      // The TutorChatAgent returns { success: true, answer: '...' } inside a 'result' object
+      if (data.success && data.result) {
+          res.json(data.result); // Forward the agent's result { answer: '...' } to the frontend
+      } else {
+          throw new Error(data.error || "Agent task failed.");
+      }
+
+  } catch (error) {
+      console.error("[API Gateway] Error forwarding task to TutorChatAgent:", error);
+      res.status(500).json({ error: "Could not get a response at this time." });
+  }
+});
 
 // =================================================================================
 // --- UPDATED: Module Completion Route is now temporarily mocked ---
