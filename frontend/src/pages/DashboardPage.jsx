@@ -2,10 +2,50 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
 import { categories } from '../data.js';
 import Header from '../components/header';
-import Footer from '../components/footer.jsx';
+import Footer from '../components/footer';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import ReactMarkdown from 'react-markdown';
 
 // Define the backend URL at the top level so all components can access it
 const BACKEND_URL = "http://localhost:3001";
+
+// =================================================================================
+// --- NEW: ChatMessage Component for Parsing and Highlighting ---
+// =================================================================================
+
+const ChatMessage = ({ text }) => {
+  return (
+    // FIX: Apply styling classes to a wrapper div, not the ReactMarkdown component
+    <div className="text-sm prose prose-invert max-w-none">
+      <ReactMarkdown
+        children={text}
+        components={{
+          // This is the key part: we define a custom renderer for code blocks
+          code(props) {
+            const {children, className, node, ...rest} = props
+            const match = /language-(\w+)/.exec(className || '')
+            return match ? (
+              // If it's a fenced code block (```), use SyntaxHighlighter
+              <SyntaxHighlighter
+                {...rest}
+                PreTag="div"
+                children={String(children).replace(/\n$/, '')}
+                language={match[1]}
+                style={atomDark}
+              />
+            ) : (
+              // If it's inline code (`code`), render it with a different style
+              <code {...rest} className="bg-gray-900 px-1 py-0.5 rounded-md">
+                {children}
+              </code>
+            )
+          }
+        }}
+      />
+    </div>
+  );
+};
 
 // =================================================================================
 // --- Child View Components for the Dashboard ---
@@ -230,7 +270,6 @@ const TutorChatView = ({ course, setView }) => {
       });
 
       if (!response.ok) throw new Error("The AI Tutor is currently unavailable.");
-
       const data = await response.json();
       const aiMessage = { sender: 'ai', text: data.answer || "Sorry, I'm not sure how to answer that." };
       setMessages(prev => [...prev, aiMessage]);
@@ -245,21 +284,44 @@ const TutorChatView = ({ course, setView }) => {
 
   return (
     <div>
-      <button onClick={() => setView('courses')} className="text-sm text-cyan-400 hover:underline mb-4">&larr; Back to Classes</button>
+      <button onClick={() => setView('courses')} className="text-sm text-cyan-400 hover:underline mb-4">
+        &larr; Back to Classes
+      </button>
       <h2 className="text-2xl font-semibold text-white mb-4">{course.title} - AI Tutor Chat</h2>
+      
       <div className="h-96 bg-gray-900/50 rounded-lg p-4 overflow-y-auto flex flex-col space-y-4 border border-gray-700">
         {messages.map((msg, index) => (
           <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.sender === 'ai' && <span className="text-2xl">🤖</span>}
-            <div className={`max-w-xl p-3 rounded-lg ${msg.sender === 'user' ? 'bg-cyan-600' : 'bg-gray-700'}`}><p className="text-sm whitespace-pre-wrap">{msg.text}</p></div>
+            <div className={`max-w-xl p-3 rounded-lg ${msg.sender === 'user' ? 'bg-cyan-600' : 'bg-gray-700'}`}>
+              <ChatMessage text={msg.text} />
+            </div>
           </div>
         ))}
-        {isLoading && <div className="flex items-start gap-3 justify-start"><span className="text-2xl">🤖</span><div className="max-w-md p-3 rounded-lg bg-gray-700"><p className="text-sm animate-pulse">AI is typing...</p></div></div>}
+        {/* --- UPDATED: Replaced the old comment with a proper loading indicator --- */}
+        {isLoading && (
+          <div className="flex items-start gap-3 justify-start">
+             <span className="text-2xl">🤖</span>
+             <div className="max-w-md p-3 rounded-lg bg-gray-700">
+              <p className="text-sm animate-pulse">AI is typing...</p>
+            </div>
+          </div>
+        )}
         <div ref={chatEndRef} />
       </div>
+
       <form onSubmit={handleSendMessage} className="mt-4 flex space-x-2">
-        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask a question about the course..." className="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none" disabled={isLoading}/>
-        <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-lg" disabled={isLoading}>Send</button>
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask a question about the course..."
+          className="flex-grow bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+          disabled={isLoading}
+        />
+        <button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-lg" disabled={isLoading}>
+          Send
+        </button>
       </form>
     </div>
   );
