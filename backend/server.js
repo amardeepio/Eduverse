@@ -143,6 +143,15 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+
+
+app.get('/api/config', (req, res) => {
+  console.log('[API Gateway] Sending configuration to frontend.');
+  res.json({
+    contractAddress: process.env.CONTRACT_ADDRESS
+  });
+});
+
 // =================================================================================
 // --- UPDATED: Module Completion Route is now temporarily mocked ---
 // =================================================================================

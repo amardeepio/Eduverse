@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ethers } from 'ethers';
-import { categories } from '../data.js';
+import { categories ,CONTRACT_ADDRESS} from '../data.js';
 import Header from '../components/header';
 import Footer from '../components/footer';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -138,34 +138,25 @@ const QuizView = ({ course, user, setView }) => {
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState('');
   
-  const BACKEND_URL = "http://localhost:3001";
-  const currentQuestion = course.quiz[currentQuestionIndex];
-  const isLastQuestion = currentQuestionIndex === course.quiz.length - 1;
-
-  // --- NEW: State to hold the currently visible part of the hint for the animation ---
   const [displayedHint, setDisplayedHint] = useState('');
 
-  // --- NEW: useEffect hook to create the streaming text animation ---
   useEffect(() => {
-    // If there's no hint, do nothing.
     if (!aiHint) return;
-
-    // Reset the displayed hint when a new hint arrives.
     setDisplayedHint('');
-    
     let index = 0;
     const intervalId = setInterval(() => {
       if (index < aiHint.length) {
         setDisplayedHint(prev => prev + aiHint.charAt(index));
         index++;
       } else {
-        clearInterval(intervalId); // Stop the timer when the full hint is displayed
+        clearInterval(intervalId);
       }
-    }, 30); // Adjust the speed of the typing here (e.g., 30ms per character)
-
-    // Cleanup function to clear the interval if the component unmounts
+    }, 30);
     return () => clearInterval(intervalId);
-  }, [aiHint]); // This effect re-runs whenever a new hint is set
+  }, [aiHint]);
+
+  const currentQuestion = course.quiz[currentQuestionIndex];
+  const isLastQuestion = currentQuestionIndex === course.quiz.length - 1;
 
   const handleNext = () => {
     if (selectedAnswer === null) {
@@ -176,13 +167,11 @@ const QuizView = ({ course, user, setView }) => {
     if (selectedAnswer === currentQuestion.correctAnswer) {
       setError('');
       setIsCorrect(true);
-
       setTimeout(() => {
         setIsCorrect(false);
         if (isLastQuestion) {
           handleSubmitToBlockchain();
         } else {
-          // Reset state for the next question
           setSelectedAnswer(null);
           setAiHint(null); 
           setCurrentQuestionIndex(prev => prev + 1);
@@ -203,7 +192,9 @@ const QuizView = ({ course, user, setView }) => {
       setIsFetchingHint(true);
       setError('');
       try {
-          const response = await fetch(`${BACKEND_URL}/api/hint`, {
+          // NOTE: The user's code had /api/hint, but the provided server.js has /api/help.
+          // Using /api/help as it exists in the provided backend code.
+          const response = await fetch(`${BACKEND_URL}/api/help`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -213,17 +204,15 @@ const QuizView = ({ course, user, setView }) => {
           });
           if (!response.ok) throw new Error("Failed to get a hint from the AI tutor.");
           const data = await response.json();
-          if (data.success) {
-              setAiHint(data.hint); // Set the hint state
-          } else {
-              throw new Error(data.error || "AI tutor could not provide a hint.");
-          }
+          // The /api/help route does not return a 'success' boolean, just the hint directly
+          setAiHint(data.hint);
       } catch (err) {
           setError(err.message);
       } finally {
-          setIsFetchingHint(false); // Hide loading indicator
+          setIsFetchingHint(false);
       }
   };
+
   const handleSubmitToBlockchain = async () => {
     if (!window.ethereum) return setError('MetaMask is not installed!');
     setIsLoading(true);
@@ -232,26 +221,31 @@ const QuizView = ({ course, user, setView }) => {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
       const moduleName = course.title;
-      const message = `complete-module:${moduleName}`;
+      // The message to sign does not need the contract address
+      const message = `complete-module:${moduleName}`; 
       const messageHash = ethers.id(message);
       const signature = await signer.signMessage(ethers.getBytes(messageHash));
+
+      // THE FIX IS HERE: Add contractAddress to the request body
       const response = await fetch(`${BACKEND_URL}/complete-module-signed`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userAddress: user.address, moduleName, signature })
+        body: JSON.stringify({ 
+            userAddress: user.address, 
+            moduleName, 
+            signature,
+            contractAddress: CONTRACT_ADDRESS // <-- This line was missing
+        })
       });
-      const data = await response.json();
 
+      const data = await response.json();
       console.log("Data received from backend:", data);
 
-      // --- FINAL FIX: Access the txHash from the nested 'result' object ---
-      if (data.success && data.result.txHash) {
+      if (data.success && data.result?.txHash) {
           setTxHash(data.result.txHash);
       } else {
-          setError(data.message || 'An unknown error occurred.');
+          setError(data.error || 'An unknown error occurred.');
       }
-      // --- End of Fix ---
-
     } catch (err) {
       setError(err.reason || err.message || "Operation failed.");
     } finally {
@@ -261,6 +255,7 @@ const QuizView = ({ course, user, setView }) => {
   
   if (txHash) return <SuccessView txHash={txHash} onReset={() => setView('courses')} />;
   
+  // The JSX for QuizView remains the same
   return (
     <div>
       {showHelpModal && (
@@ -455,7 +450,7 @@ const DashboardPage = ({ user, onLogout }) => {
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans">
       <div className="w-full max-w-5xl bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
-        <Header user={user} onLogout={onLogout} />
+      <Header userAddress={user?.address} onLogout={onLogout} />
         <div className="mt-8">
           {renderMainContent()}
         </div>
