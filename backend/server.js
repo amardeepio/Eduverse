@@ -44,7 +44,7 @@ const userNonces = {};
 // =================================================================================
 // --- Help Route for AI Tutor (This is our focus) ---
 // =================================================================================
-app.post('/api/help', async (req, res) => {
+app.post('/api/hint', async (req, res) => {
     const { question, options } = req.body;
     console.log(`[API Gateway] Received help request for question: "${question}"`);
     
@@ -141,6 +141,15 @@ app.post('/api/chat', async (req, res) => {
       console.error("[API Gateway] Error forwarding task to TutorChatAgent:", error);
       res.status(500).json({ error: "Could not get a response at this time." });
   }
+});
+
+
+
+app.get('/api/config', (req, res) => {
+  console.log('[API Gateway] Sending configuration to frontend.');
+  res.json({
+    contractAddress: process.env.CONTRACT_ADDRESS
+  });
 });
 
 // =================================================================================
