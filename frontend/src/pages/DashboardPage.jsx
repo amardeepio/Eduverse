@@ -73,42 +73,68 @@ const ChatMessage = ({ text, isUser }) => {
 // --- Child View Components for the Dashboard ---
 // =================================================================================
 
-const CourseSelectionView = ({ onSelectCourse, setView }) => (
-  <div className="space-y-8">
-    {categories.map(category => (
-      <div key={category.categoryName}>
-        <h2 className="text-2xl font-semibold mb-4 text-cyan-300 border-b border-gray-700 pb-2">
-          {category.categoryName}
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {category.courses.map(course => (
-            <div 
-              key={course.id}
-              className="bg-gray-900/50 p-6 rounded-lg border border-gray-700 flex flex-col justify-between"
-            >
-              <div>
-                <h3 className="font-bold text-lg text-white mb-2">{course.title}</h3>
-                <p className="text-gray-400 text-sm h-12">{course.description}</p>
-              </div>
-              <div className="flex items-center space-x-6 mt-6 pt-4 border-t border-gray-700">
-                <button 
-                  onClick={() => { onSelectCourse(course); setView('quiz'); }}
-                  className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
-                >
-                  Take Quiz →
-                </button>
-                <button 
-                  onClick={() => { onSelectCourse(course); setView('tutorChat'); }}
-                  className="text-gray-400 font-semibold hover:text-white transition-colors"
-                >
-                  Need help?🤔 Ask AI Tutor!🤖
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+const CourseSelectionView = ({ onSelectCourse, setView, searchTerm, setSearchTerm, filteredCategories }) => (
+  <div>
+    {/* 1. Add the Search Bar UI */}
+    <div className="mb-8 relative">
+      <input
+        type="text"
+        placeholder="Search for a course..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="w-full bg-gray-900/50 border border-gray-700 rounded-lg py-3 pl-12 pr-4 text-white focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+      />
+      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
       </div>
-    ))}
+    </div>
+
+    {/* 2. Render categories and courses from the filtered list */}
+    <div className="space-y-8">
+      {filteredCategories.length > 0 ? (
+        filteredCategories.map(category => (
+          <div key={category.categoryName}>
+            <h2 className="text-2xl font-semibold mb-4 text-cyan-300 border-b border-gray-700 pb-2">
+              {category.categoryName}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {category.courses.map(course => (
+                <div 
+                  key={course.id}
+                  className="bg-gray-900/50 p-6 rounded-lg border border-gray-700 flex flex-col justify-between"
+                >
+                  <div>
+                    <h3 className="font-bold text-lg text-white mb-2">{course.title}</h3>
+                    <p className="text-gray-400 text-sm h-12">{course.description}</p>
+                  </div>
+                  <div className="flex items-center space-x-6 mt-6 pt-4 border-t border-gray-700">
+                    <button 
+                      onClick={() => { onSelectCourse(course); setView('quiz'); }}
+                      className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors"
+                    >
+                      Take Quiz →
+                    </button>
+                    <button 
+                      onClick={() => { onSelectCourse(course); setView('tutorChat'); }}
+                      className="text-gray-400 font-semibold hover:text-white transition-colors"
+                    >
+                      Need help?🤔 Ask AI Tutor!🤖
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      ) : (
+        // 3. Display a message if no courses match the search
+        <div className="text-center py-10">
+          <p className="text-gray-400">No courses found for "{searchTerm}"</p>
+        </div>
+      )}
+    </div>
   </div>
 );
 
@@ -176,7 +202,7 @@ const QuizView = ({ course, user, setView }) => {
           setAiHint(null); 
           setCurrentQuestionIndex(prev => prev + 1);
         }
-      }, 1000);
+      }, 400);
     } else {
       const newCount = (wrongAnswerCount[currentQuestionIndex] || 0) + 1;
       setWrongAnswerCount(prev => ({ ...prev, [currentQuestionIndex]: newCount }));
@@ -194,7 +220,7 @@ const QuizView = ({ course, user, setView }) => {
       try {
           // NOTE: The user's code had /api/hint, but the provided server.js has /api/help.
           // Using /api/help as it exists in the provided backend code.
-          const response = await fetch(`${BACKEND_URL}/api/help`, {
+          const response = await fetch(`${BACKEND_URL}/api/hint`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -369,7 +395,7 @@ const TutorChatView = ({ course, setView }) => {
       </button>
       <h2 className="text-2xl font-semibold text-white mb-4">{course.title} - AI Tutor Chat</h2>
       
-      <div className="h-96 bg-gray-900/50 rounded-lg p-4 overflow-y-auto flex flex-col space-y-4 border border-gray-700">
+      <div className="h-[50rem] bg-gray-900/50 rounded-lg p-4 overflow-y-auto flex flex-col space-y-4 border border-gray-700">
         {messages.map((msg, index) => (
           <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.sender === 'ai' && <span className="text-2xl">🤖</span>}
@@ -432,6 +458,23 @@ const SuccessView = ({ txHash, onReset }) => {
 const DashboardPage = ({ user, onLogout }) => {
   const [currentView, setCurrentView] = useState('courses');
   const [selectedCourse, setSelectedCourse] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // 1. Get user's saved interests from local storage
+  const savedInterests = JSON.parse(localStorage.getItem('userInterests')) || [];
+
+  // 2. First, filter categories based on saved interests
+  const interestFilteredCategories = savedInterests.length > 0
+    ? categories.filter(category => savedInterests.includes(category.categoryName))
+    : categories; // If no interests are saved, show all categories
+
+  // 3. Then, filter the remaining categories by the search term
+  const filteredCategories = interestFilteredCategories.map(category => {
+    const filteredCourses = category.courses.filter(course => 
+      course.title.toLowerCase().startsWith(searchTerm.toLowerCase())
+    );
+    return { ...category, courses: filteredCourses };
+  }).filter(category => category.courses.length > 0);
 
   const renderMainContent = () => {
     switch (currentView) {
@@ -439,18 +482,25 @@ const DashboardPage = ({ user, onLogout }) => {
         return <QuizView course={selectedCourse} user={user} setView={setCurrentView} />;
       case 'tutorChat':
         return <TutorChatView course={selectedCourse} user={user} setView={setCurrentView} />;
-      case 'success':
-         return <CourseSelectionView onSelectCourse={setSelectedCourse} setView={setCurrentView} />;
       case 'courses':
       default:
-        return <CourseSelectionView onSelectCourse={setSelectedCourse} setView={setCurrentView} />;
+        return (
+          <CourseSelectionView 
+            onSelectCourse={setSelectedCourse} 
+            setView={setCurrentView} 
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            // Pass the final filtered list to the component
+            filteredCategories={filteredCategories}
+          />
+        );
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans">
       <div className="w-full max-w-5xl bg-gray-800 rounded-2xl shadow-2xl p-8 border border-gray-700">
-      <Header userAddress={user?.address} onLogout={onLogout} />
+        <Header userAddress={user?.address} onLogout={onLogout} />
         <div className="mt-8">
           {renderMainContent()}
         </div>
