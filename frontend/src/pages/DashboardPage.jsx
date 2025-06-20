@@ -395,7 +395,7 @@ const TutorChatView = ({ course, setView }) => {
       </button>
       <h2 className="text-2xl font-semibold text-white mb-4">{course.title} - AI Tutor Chat</h2>
       
-      <div className="h-96 bg-gray-900/50 rounded-lg p-4 overflow-y-auto flex flex-col space-y-4 border border-gray-700">
+      <div className="h-[50rem] bg-gray-900/50 rounded-lg p-4 overflow-y-auto flex flex-col space-y-4 border border-gray-700">
         {messages.map((msg, index) => (
           <div key={index} className={`flex items-start gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.sender === 'ai' && <span className="text-2xl">🤖</span>}
@@ -458,16 +458,23 @@ const SuccessView = ({ txHash, onReset }) => {
 const DashboardPage = ({ user, onLogout }) => {
   const [currentView, setCurrentView] = useState('courses');
   const [selectedCourse, setSelectedCourse] = useState(null);
-  // 4. Add state for the search term here
   const [searchTerm, setSearchTerm] = useState('');
 
-  // 5. Filter the categories based on the search term
-  const filteredCategories = categories.map(category => {
+  // 1. Get user's saved interests from local storage
+  const savedInterests = JSON.parse(localStorage.getItem('userInterests')) || [];
+
+  // 2. First, filter categories based on saved interests
+  const interestFilteredCategories = savedInterests.length > 0
+    ? categories.filter(category => savedInterests.includes(category.categoryName))
+    : categories; // If no interests are saved, show all categories
+
+  // 3. Then, filter the remaining categories by the search term
+  const filteredCategories = interestFilteredCategories.map(category => {
     const filteredCourses = category.courses.filter(course => 
       course.title.toLowerCase().startsWith(searchTerm.toLowerCase())
     );
     return { ...category, courses: filteredCourses };
-  }).filter(category => category.courses.length > 0); // Only include categories that have matching courses
+  }).filter(category => category.courses.length > 0);
 
   const renderMainContent = () => {
     switch (currentView) {
@@ -475,17 +482,15 @@ const DashboardPage = ({ user, onLogout }) => {
         return <QuizView course={selectedCourse} user={user} setView={setCurrentView} />;
       case 'tutorChat':
         return <TutorChatView course={selectedCourse} user={user} setView={setCurrentView} />;
-      case 'success':
-         return <CourseSelectionView onSelectCourse={setSelectedCourse} setView={setCurrentView} />;
       case 'courses':
       default:
-        // 6. Pass the search state and filtered data to the CourseSelectionView
         return (
           <CourseSelectionView 
             onSelectCourse={setSelectedCourse} 
             setView={setCurrentView} 
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
+            // Pass the final filtered list to the component
             filteredCategories={filteredCategories}
           />
         );
